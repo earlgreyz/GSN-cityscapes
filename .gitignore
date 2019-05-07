@@ -1,0 +1,14 @@
+# PyCharm specific files
+.idea
+
+# Python compiled bytecode
+**/*.pyc
+
+# macOS specific files
+.DS_Store
+
+# Virtualenv
+venv/
+
+# Dataset
+dataset/
