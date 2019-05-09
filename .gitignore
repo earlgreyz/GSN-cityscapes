@@ -3,6 +3,7 @@
 
 # Python compiled bytecode
 **/*.pyc
+__pycache__/
 
 # macOS specific files
 .DS_Store
@@ -12,3 +13,6 @@ venv/
 
 # Dataset
 dataset/
+
+# Don't ignore sources
+!src/**

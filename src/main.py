@@ -2,8 +2,12 @@ import click
 
 import torch
 from torch import cuda
+from torch.utils.data import DataLoader
 
+from classes import feature_classes
 from nn.unet import UNet
+from dataset.cityscapes import CityscapesDataset
+from dataset.split import split_dataset
 
 desired_precision = .5
 
@@ -37,9 +41,10 @@ def main(load_model: str,
     # Load dataset
     click.echo('Loading dataset from \'{}\', sample rate is {}'.format(dataset_dir, sample_rate))
 
-    #train_dataset, test_dataset = split_dataset(dataset, sample_rate)
-    #train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
-    #test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=True)
+    dataset = CityscapesDataset(root=dataset_dir, classes=feature_classes)
+    train_dataset, test_dataset = split_dataset(dataset, sample_rate)
+    train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
+    test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=True)
 
     if not no_train:
         click.echo('Training model using \'{}\''.format(dataset_dir))
