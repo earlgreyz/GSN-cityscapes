@@ -4,10 +4,12 @@ import torch
 from torch import cuda
 from torch.utils.data import DataLoader
 
-from classes import feature_classes
+from model.train import train
 from nn.unet import UNet
 from dataset.cityscapes import CityscapesDataset
 from dataset.split import split_dataset
+
+from classes import feature_classes
 
 desired_precision = .5
 
@@ -31,7 +33,7 @@ def main(load_model: str,
     device = torch.device('cuda:0' if cuda.is_available() else 'cpu')
     click.secho('Using device={}'.format(device), fg='blue')
 
-    net = UNet()
+    net = UNet((3, 256, 256), feature_classes.shape[0])
     net.to(device)
 
     if load_model is not None:
@@ -39,7 +41,7 @@ def main(load_model: str,
         net.load_state_dict(torch.load(load_model, map_location=device))
 
     # Load dataset
-    click.echo('Loading dataset from \'{}\', sample rate is {}'.format(dataset_dir, sample_rate))
+    click.echo('Loading dataset from \'{}\', using {}% as validation dataset'.format(dataset_dir, sample_rate * 100))
 
     dataset = CityscapesDataset(root=dataset_dir, classes=feature_classes)
     train_dataset, test_dataset = split_dataset(dataset, sample_rate)
@@ -47,11 +49,12 @@ def main(load_model: str,
     test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=True)
 
     if not no_train:
-        click.echo('Training model using \'{}\''.format(dataset_dir))
+        click.echo('Training model')
         net.train()
+        train(net, train_loader, num_epochs=epochs, learning_rate=learning_rate)
 
     if not no_test:
-        click.echo('Testing model using \'{}\''.format(dataset_dir))
+        click.echo('Testing model')
         net.eval()
 
 

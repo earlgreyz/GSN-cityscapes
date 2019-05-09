@@ -2,8 +2,12 @@
 .idea
 
 # Python compiled bytecode
-**/*.pyc
 __pycache__/
+*.py[cod]
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
 
 # macOS specific files
 .DS_Store
