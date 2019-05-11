@@ -3,17 +3,24 @@ from torch import nn
 import torch.nn.functional as F
 
 
+def center_crop(layer, target_size):
+    _, _, layer_height, layer_width = layer.size()
+    diff_y = (layer_height - target_size[0]) // 2
+    diff_x = (layer_width - target_size[1]) // 2
+    return layer[:, :, diff_y: (diff_y + target_size[0]), diff_x: (diff_x + target_size[1])]
+
+
 class UNet(nn.Module):
     def __init__(self, in_channels, classes_count, filters=32):
         super().__init__()
-        self.down1 = UNetConvBlock(in_channels, filters, True, True)
-        self.down2 = UNetConvBlock(filters, filters * 2, True, True)
-        self.down3 = UNetConvBlock(filters * 2, filters * 4, True, True)
-        self.down4 = UNetConvBlock(filters * 4, filters * 8, True, True)
+        self.down1 = StackEncoder(in_channels, filters)
+        self.down2 = StackEncoder(filters, filters * 2)
+        self.down3 = StackEncoder(filters * 2, filters * 4)
+        self.down4 = StackEncoder(filters * 4, filters * 8)
 
-        self.up1 = UNetUpBlock(filters * 8, filters * 4, 'upconv', True, True)
-        self.up2 = UNetUpBlock(filters * 4, filters * 2, 'upconv', True, True)
-        self.up3 = UNetUpBlock(filters * 2, filters, 'upconv', True, True)
+        self.up1 = StackDecoder(filters * 8, filters * 4)
+        self.up2 = StackDecoder(filters * 4, filters * 2)
+        self.up3 = StackDecoder(filters * 2, filters)
 
         self.last = nn.Conv2d(filters, classes_count, kernel_size=1)
 
@@ -33,53 +40,28 @@ class UNet(nn.Module):
         return self.last(x)
 
 
-class UNetConvBlock(nn.Module):
-    def __init__(self, in_size, out_size, padding, batch_norm):
-        super(UNetConvBlock, self).__init__()
-        block = []
-
-        block.append(nn.Conv2d(in_size, out_size, kernel_size=3, padding=int(padding)))
-        block.append(nn.ReLU())
-        if batch_norm:
-            block.append(nn.BatchNorm2d(out_size))
-
-        block.append(nn.Conv2d(out_size, out_size, kernel_size=3, padding=int(padding)))
-        block.append(nn.ReLU())
-        if batch_norm:
-            block.append(nn.BatchNorm2d(out_size))
-
-        self.block = nn.Sequential(*block)
+class StackEncoder(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
+        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
+        self.bn1 = nn.BatchNorm2d(out_channels)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
+        self.bn2 = nn.BatchNorm2d(out_channels)
 
     def forward(self, x):
-        out = self.block(x)
-        return out
+        x = self.bn1(F.relu(self.conv1(x)))
+        x = self.bn2(F.relu(self.conv2(x)))
+        return x
 
 
-class UNetUpBlock(nn.Module):
-    def __init__(self, in_size, out_size, up_mode, padding, batch_norm):
-        super(UNetUpBlock, self).__init__()
-        if up_mode == 'upconv':
-            self.up = nn.ConvTranspose2d(in_size, out_size, kernel_size=2, stride=2)
-        elif up_mode == 'upsample':
-            self.up = nn.Sequential(
-                nn.Upsample(mode='bilinear', scale_factor=2),
-                nn.Conv2d(in_size, out_size, kernel_size=1),
-            )
+class StackDecoder(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
+        self.conv = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2)
+        self.encoder = StackEncoder(in_channels, out_channels)
 
-        self.conv_block = UNetConvBlock(in_size, out_size, padding, batch_norm)
-
-    def center_crop(self, layer, target_size):
-        _, _, layer_height, layer_width = layer.size()
-        diff_y = (layer_height - target_size[0]) // 2
-        diff_x = (layer_width - target_size[1]) // 2
-        return layer[
-               :, :, diff_y: (diff_y + target_size[0]), diff_x: (diff_x + target_size[1])
-               ]
-
-    def forward(self, x, bridge):
-        up = self.up(x)
-        crop1 = self.center_crop(bridge, up.shape[2:])
-        out = torch.cat([up, crop1], 1)
-        out = self.conv_block(out)
-
-        return out
+    def forward(self, x, trace):
+        x = self.conv(x)
+        crop = center_crop(trace, x.shape[2:])
+        x = torch.cat([x, crop], 1)
+        return self.encoder(x)
