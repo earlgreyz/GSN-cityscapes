@@ -71,4 +71,4 @@ class Classifier:
                 total += targets.numel()
                 correct += (predicted == targets).sum().item()
 
-        return total / correct
+        return correct / total

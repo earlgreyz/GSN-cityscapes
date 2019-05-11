@@ -18,5 +18,5 @@ venv/
 # Dataset
 dataset/
 
-# Don't ignore sources
-!src/**
+# Don't ignore sources datasets
+!src/dataset/

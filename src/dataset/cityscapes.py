@@ -11,7 +11,7 @@ from torchvision.transforms import transforms
 def image_loader(path):
     with open(path, 'rb') as f:
         img = Image.open(f)
-        return np.array(img.convert('RGB'))
+        return img.convert('RGB')
 
 
 class CityscapesDataset(Dataset):
@@ -23,19 +23,14 @@ class CityscapesDataset(Dataset):
 
     def __getitem__(self, item):
         img = image_loader(self.samples[item])
-        h, w, d = img.shape
+        w, h = img.size
         n = w // 2
 
-        label = np.zeros((h, n))
-        for y in range(h):
-            for x in range(n):
-                index = np.where((self.classes == img[y, n + x, :]).all(axis=1))
-                assert len(index) == 1
-                label[y, x] = index[0]
+        label = [[self.classes[img.getpixel((n + x, y))] for x in range(n)] for y in range(h)]
 
-        sample = img[:, :n, :]
+        sample = self.transform(np.array(img)[:, :n, :])
         target = torch.tensor(label, dtype=torch.long)
-        return self.transform(sample), target
+        return sample, target
 
     def __len__(self):
         return len(self.samples)

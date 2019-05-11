@@ -9,7 +9,7 @@ from nn.unet import UNet
 from dataset.cityscapes import CityscapesDataset
 from dataset.split import split_dataset
 
-from classes import feature_classes
+from classes import cityscape_classes
 
 desired_precision = .5
 
@@ -34,7 +34,7 @@ def main(load_model: str, save_model: str,
     device = torch.device('cuda:0' if cuda.is_available() else 'cpu')
     click.secho('Using device={}'.format(device), fg='blue')
 
-    net = UNet(in_channels=3, n_classes=feature_classes.shape[0], depth=4, wf=4, padding=True)
+    net = UNet(in_channels=3, n_classes=len(cityscape_classes), depth=4, wf=4, padding=True)
     net.to(device)
 
     if load_model is not None:
@@ -44,7 +44,7 @@ def main(load_model: str, save_model: str,
     # Load dataset
     click.echo('Loading dataset from \'{}\', using {}% as validation dataset'.format(dataset_dir, sample_rate * 100))
 
-    dataset = CityscapesDataset(root=dataset_dir, classes=feature_classes)
+    dataset = CityscapesDataset(root=dataset_dir, classes=cityscape_classes)
     train_dataset, test_dataset = split_dataset(dataset, sample_rate)
     train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=True)
