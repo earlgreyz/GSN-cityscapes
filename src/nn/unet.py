@@ -1,103 +1,123 @@
 import torch
-import torch.nn as nn
+from torch import nn
 import torch.nn.functional as F
 
 
-class ConvBnRelu(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, padding, stride):
-        super(ConvBnRelu, self).__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, padding=padding, stride=stride)
-        self.bn = nn.BatchNorm2d(out_channels)
-        self.relu = nn.ReLU()
-
-    def forward(self, x):
-        x = self.conv(x)
-        x = self.bn(x)
-        x = self.relu(x)
-        return x
-
-
-class StackEncoder(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super(StackEncoder, self).__init__()
-        self.convr1 = ConvBnRelu(in_channels, out_channels, kernel_size=(3, 3), stride=1, padding=0)
-        self.convr2 = ConvBnRelu(out_channels, out_channels, kernel_size=(3, 3), stride=1, padding=0)
-        self.maxPool = nn.MaxPool2d(kernel_size=(2, 2), stride=2)
-
-    def forward(self, x):
-        x = self.convr1(x)
-        x = self.convr2(x)
-        x_trace = x
-        x = self.maxPool(x)
-        return x, x_trace
-
-
-class StackDecoder(nn.Module):
-    def __init__(self, in_channels, out_channels, upsample_size):
-        super(StackDecoder, self).__init__()
-
-        self.upSample = nn.Upsample(size=upsample_size, scale_factor=2, mode="bilinear")
-        self.convr1 = ConvBnRelu(in_channels, out_channels, kernel_size=(3, 3), stride=1, padding=0)
-        # Crop + concat step between these 2
-        self.convr2 = ConvBnRelu(in_channels, out_channels, kernel_size=(3, 3), stride=1, padding=0)
-
-    def _crop_concat(self, upsampled, bypass):
-        """
-         Crop y to the (h, w) of x and concat them.
-         Used for the expansive path.
-        Returns:
-            The concatenated tensor
-        """
-        c = (bypass.size()[2] - upsampled.size()[2]) // 2
-        bypass = F.pad(bypass, [-c, -c, -c, -c])
-
-        return torch.cat((upsampled, bypass), 1)
-
-    def forward(self, x, down_tensor):
-        x = self.upSample(x)
-        x = self.convr1(x)
-        x = self._crop_concat(x, down_tensor)
-        x = self.convr2(x)
-        return x
-
-
 class UNet(nn.Module):
-    def __init__(self, in_shape, out_channels):
-        super().__init__()
-        channels, height, width = in_shape
+    def __init__(
+        self,
+        in_channels=1,
+        n_classes=2,
+        depth=5,
+        wf=6,
+        padding=False,
+        batch_norm=False,
+        up_mode='upconv',
+    ):
+        """
+        Implementation of
+        U-Net: Convolutional Networks for Biomedical Image Segmentation
+        (Ronneberger et al., 2015)
+        https://arxiv.org/abs/1505.04597
+        Using the default arguments will yield the exact version used
+        in the original paper
+        Args:
+            in_channels (int): number of input channels
+            n_classes (int): number of output channels
+            depth (int): depth of the network
+            wf (int): number of filters in the first layer is 2**wf
+            padding (bool): if True, apply padding such that the input shape
+                            is the same as the output.
+                            This may introduce artifacts
+            batch_norm (bool): Use BatchNorm after layers with an
+                               activation function
+            up_mode (str): one of 'upconv' or 'upsample'.
+                           'upconv' will use transposed convolutions for
+                           learned upsampling.
+                           'upsample' will use bilinear upsampling.
+        """
+        super(UNet, self).__init__()
+        assert up_mode in ('upconv', 'upsample')
+        self.padding = padding
+        self.depth = depth
+        prev_channels = in_channels
+        self.down_path = nn.ModuleList()
+        for i in range(depth):
+            self.down_path.append(
+                UNetConvBlock(prev_channels, 2 ** (wf + i), padding, batch_norm)
+            )
+            prev_channels = 2 ** (wf + i)
 
-        self.down1 = StackEncoder(channels, 64)
-        self.down2 = StackEncoder(64, 128)
-        self.down3 = StackEncoder(128, 256)
-        self.down4 = StackEncoder(256, 512)
+        self.up_path = nn.ModuleList()
+        for i in reversed(range(depth - 1)):
+            self.up_path.append(
+                UNetUpBlock(prev_channels, 2 ** (wf + i), up_mode, padding, batch_norm)
+            )
+            prev_channels = 2 ** (wf + i)
 
-        self.center = nn.Sequential(
-            ConvBnRelu(512, 1024, kernel_size=(3, 3), stride=1, padding=0),
-            ConvBnRelu(1024, 1024, kernel_size=(3, 3), stride=1, padding=0)
-        )
-
-        self.up1 = StackDecoder(in_channels=1024, out_channels=512, upsample_size=(56, 56))
-        self.up2 = StackDecoder(in_channels=512, out_channels=256, upsample_size=(104, 104))
-        self.up3 = StackDecoder(in_channels=256, out_channels=128, upsample_size=(200, 200))
-        self.up4 = StackDecoder(in_channels=128, out_channels=64, upsample_size=(392, 392))
-
-        # 1x1 convolution at the last layer
-        # Different from the paper is the output size here
-        self.output_seg_map = nn.Conv2d(64, out_channels, kernel_size=(1, 1), padding=0, stride=1)
+        self.last = nn.Conv2d(prev_channels, n_classes, kernel_size=1)
 
     def forward(self, x):
-        x, x_trace1 = self.down1(x)  # Calls the forward() method of each layer
-        x, x_trace2 = self.down2(x)
-        x, x_trace3 = self.down3(x)
-        x, x_trace4 = self.down4(x)
+        blocks = []
+        for i, down in enumerate(self.down_path):
+            x = down(x)
+            if i != len(self.down_path) - 1:
+                blocks.append(x)
+                x = F.max_pool2d(x, 2)
 
-        x = self.center(x)
+        for i, up in enumerate(self.up_path):
+            x = up(x, blocks[-i - 1])
 
-        x = self.up1(x, x_trace4)
-        x = self.up2(x, x_trace3)
-        x = self.up3(x, x_trace2)
-        x = self.up4(x, x_trace1)
+        return self.last(x)
 
-        out = self.output_seg_map(x)
-        out = torch.squeeze(out, dim=1)
+
+class UNetConvBlock(nn.Module):
+    def __init__(self, in_size, out_size, padding, batch_norm):
+        super(UNetConvBlock, self).__init__()
+        block = []
+
+        block.append(nn.Conv2d(in_size, out_size, kernel_size=3, padding=int(padding)))
+        block.append(nn.ReLU())
+        if batch_norm:
+            block.append(nn.BatchNorm2d(out_size))
+
+        block.append(nn.Conv2d(out_size, out_size, kernel_size=3, padding=int(padding)))
+        block.append(nn.ReLU())
+        if batch_norm:
+            block.append(nn.BatchNorm2d(out_size))
+
+        self.block = nn.Sequential(*block)
+
+    def forward(self, x):
+        out = self.block(x)
+        return out
+
+
+class UNetUpBlock(nn.Module):
+    def __init__(self, in_size, out_size, up_mode, padding, batch_norm):
+        super(UNetUpBlock, self).__init__()
+        if up_mode == 'upconv':
+            self.up = nn.ConvTranspose2d(in_size, out_size, kernel_size=2, stride=2)
+        elif up_mode == 'upsample':
+            self.up = nn.Sequential(
+                nn.Upsample(mode='bilinear', scale_factor=2),
+                nn.Conv2d(in_size, out_size, kernel_size=1),
+            )
+
+        self.conv_block = UNetConvBlock(in_size, out_size, padding, batch_norm)
+
+    def center_crop(self, layer, target_size):
+        _, _, layer_height, layer_width = layer.size()
+        diff_y = (layer_height - target_size[0]) // 2
+        diff_x = (layer_width - target_size[1]) // 2
+        return layer[
+            :, :, diff_y : (diff_y + target_size[0]), diff_x : (diff_x + target_size[1])
+        ]
+
+    def forward(self, x, bridge):
+        up = self.up(x)
+        crop1 = self.center_crop(bridge, up.shape[2:])
+        out = torch.cat([up, crop1], 1)
+        out = self.conv_block(out)
+
         return out

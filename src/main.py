@@ -4,7 +4,7 @@ import torch
 from torch import cuda
 from torch.utils.data import DataLoader
 
-from model.train import train
+from nn.classifier import Classifier
 from nn.unet import UNet
 from dataset.cityscapes import CityscapesDataset
 from dataset.split import split_dataset
@@ -17,7 +17,7 @@ desired_precision = .5
 @click.command()
 @click.option('--load-model', '-m', default=None)
 @click.option('--dataset-dir', '-d', default='../dataset')
-@click.option('--sample-rate', '-s', default=0.2)
+@click.option('--sample-rate', '-s', default=0.1)
 @click.option('--no-train', is_flag=True, default=False)
 @click.option('--no-test', is_flag=True, default=False)
 @click.option('--epochs', '-e', default=5)
@@ -33,7 +33,7 @@ def main(load_model: str,
     device = torch.device('cuda:0' if cuda.is_available() else 'cpu')
     click.secho('Using device={}'.format(device), fg='blue')
 
-    net = UNet((3, 256, 256), feature_classes.shape[0])
+    net = UNet(in_channels=3, n_classes=feature_classes.shape[0], depth=4, wf=4, padding=True)
     net.to(device)
 
     if load_model is not None:
@@ -48,14 +48,17 @@ def main(load_model: str,
     train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=True)
 
+    classifier = Classifier(net, lr=learning_rate)
+
     if not no_train:
-        click.echo('Training model')
+        click.secho('Training model', fg='blue')
         net.train()
-        train(net, train_loader, num_epochs=epochs, learning_rate=learning_rate)
+        classifier.train(train_loader, test_loader, epochs)
 
     if not no_test:
-        click.echo('Testing model')
+        click.secho('Testing model', fg='blue')
         net.eval()
+        classifier.test(test_loader)
 
 
 if __name__ == '__main__':

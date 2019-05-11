@@ -20,4 +20,4 @@ def split_dataset(dataset: Dataset, sample_rate: float) -> (SampledDataset, Samp
     items = list(range(size))
     np.random.shuffle(items)
     n = int(size * sample_rate)
-    return SampledDataset(dataset, items[:n]), SampledDataset(dataset, items[n:])
+    return SampledDataset(dataset, items[n:]), SampledDataset(dataset, items[:n])
