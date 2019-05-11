@@ -4,69 +4,31 @@ import torch.nn.functional as F
 
 
 class UNet(nn.Module):
-    def __init__(
-        self,
-        in_channels=1,
-        n_classes=2,
-        depth=5,
-        wf=6,
-        padding=False,
-        batch_norm=False,
-        up_mode='upconv',
-    ):
-        """
-        Implementation of
-        U-Net: Convolutional Networks for Biomedical Image Segmentation
-        (Ronneberger et al., 2015)
-        https://arxiv.org/abs/1505.04597
-        Using the default arguments will yield the exact version used
-        in the original paper
-        Args:
-            in_channels (int): number of input channels
-            n_classes (int): number of output channels
-            depth (int): depth of the network
-            wf (int): number of filters in the first layer is 2**wf
-            padding (bool): if True, apply padding such that the input shape
-                            is the same as the output.
-                            This may introduce artifacts
-            batch_norm (bool): Use BatchNorm after layers with an
-                               activation function
-            up_mode (str): one of 'upconv' or 'upsample'.
-                           'upconv' will use transposed convolutions for
-                           learned upsampling.
-                           'upsample' will use bilinear upsampling.
-        """
-        super(UNet, self).__init__()
-        assert up_mode in ('upconv', 'upsample')
-        self.padding = padding
-        self.depth = depth
-        prev_channels = in_channels
-        self.down_path = nn.ModuleList()
-        for i in range(depth):
-            self.down_path.append(
-                UNetConvBlock(prev_channels, 2 ** (wf + i), padding, batch_norm)
-            )
-            prev_channels = 2 ** (wf + i)
+    def __init__(self, in_channels, classes_count, filters=32):
+        super().__init__()
+        self.down1 = UNetConvBlock(in_channels, filters, True, True)
+        self.down2 = UNetConvBlock(filters, filters * 2, True, True)
+        self.down3 = UNetConvBlock(filters * 2, filters * 4, True, True)
+        self.down4 = UNetConvBlock(filters * 4, filters * 8, True, True)
 
-        self.up_path = nn.ModuleList()
-        for i in reversed(range(depth - 1)):
-            self.up_path.append(
-                UNetUpBlock(prev_channels, 2 ** (wf + i), up_mode, padding, batch_norm)
-            )
-            prev_channels = 2 ** (wf + i)
+        self.up1 = UNetUpBlock(filters * 8, filters * 4, 'upconv', True, True)
+        self.up2 = UNetUpBlock(filters * 4, filters * 2, 'upconv', True, True)
+        self.up3 = UNetUpBlock(filters * 2, filters, 'upconv', True, True)
 
-        self.last = nn.Conv2d(prev_channels, n_classes, kernel_size=1)
+        self.last = nn.Conv2d(filters, classes_count, kernel_size=1)
 
     def forward(self, x):
-        blocks = []
-        for i, down in enumerate(self.down_path):
-            x = down(x)
-            if i != len(self.down_path) - 1:
-                blocks.append(x)
-                x = F.max_pool2d(x, 2)
+        x = x_trace1 = self.down1(x)
+        x = F.max_pool2d(x, 2)
+        x = x_trace2 = self.down2(x)
+        x = F.max_pool2d(x, 2)
+        x = x_trace3 = self.down3(x)
+        x = F.max_pool2d(x, 2)
+        x = self.down4(x)
 
-        for i, up in enumerate(self.up_path):
-            x = up(x, blocks[-i - 1])
+        x = self.up1(x, x_trace3)
+        x = self.up2(x, x_trace2)
+        x = self.up3(x, x_trace1)
 
         return self.last(x)
 
@@ -111,8 +73,8 @@ class UNetUpBlock(nn.Module):
         diff_y = (layer_height - target_size[0]) // 2
         diff_x = (layer_width - target_size[1]) // 2
         return layer[
-            :, :, diff_y : (diff_y + target_size[0]), diff_x : (diff_x + target_size[1])
-        ]
+               :, :, diff_y: (diff_y + target_size[0]), diff_x: (diff_x + target_size[1])
+               ]
 
     def forward(self, x, bridge):
         up = self.up(x)

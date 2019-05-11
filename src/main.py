@@ -34,7 +34,7 @@ def main(load_model: str, save_model: str,
     device = torch.device('cuda:0' if cuda.is_available() else 'cpu')
     click.secho('Using device={}'.format(device), fg='blue')
 
-    net = UNet(in_channels=3, n_classes=len(cityscape_classes), depth=4, wf=4, padding=True)
+    net = UNet(in_channels=3, classes_count=len(cityscape_classes))
     net.to(device)
 
     if load_model is not None:
