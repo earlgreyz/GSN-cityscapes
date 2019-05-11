@@ -31,7 +31,10 @@ class Classifier:
             self._train_epoch(epoch=epoch, loader=train_loader)
             click.echo('Testing epoch {}'.format(epoch))
             self.net.eval()
-            self.test(test_loader)
+            accuracy = self.test(test_loader)
+            color = 'green' if accuracy > .5 else 'red'
+            click.secho('Accuracy={}'.format(accuracy), fg=color)
+
 
     def _train_epoch(self, epoch, loader):
         running_loss = RunningAverage()

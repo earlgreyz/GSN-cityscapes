@@ -16,8 +16,9 @@ desired_precision = .5
 
 @click.command()
 @click.option('--load-model', '-m', default=None)
+@click.option('--save-model', '-s', default=None)
 @click.option('--dataset-dir', '-d', default='../dataset')
-@click.option('--sample-rate', '-s', default=0.1)
+@click.option('--sample-rate', '-r', default=0.1)
 @click.option('--no-train', is_flag=True, default=False)
 @click.option('--no-test', is_flag=True, default=False)
 @click.option('--epochs', '-e', default=5)
@@ -25,7 +26,7 @@ desired_precision = .5
 @click.option('--learning-rate', '-l', default=0.01)
 @click.option('--logs-dir', default='../logs')
 @click.option('--output-dir', default='../output')
-def main(load_model: str,
+def main(load_model: str, save_model: str,
          dataset_dir: str, sample_rate: float,
          no_train: bool, no_test: bool,
          epochs: int, batch_size: int, learning_rate: float,
@@ -55,10 +56,16 @@ def main(load_model: str,
         net.train()
         classifier.train(train_loader, test_loader, epochs)
 
+    if save_model is not None and not no_train:
+        click.secho('Saving model as \'{}\''.format(save_model), fg='yellow')
+        torch.save(net.state_dict(), save_model)
+
     if not no_test:
         click.secho('Testing model', fg='blue')
         net.eval()
-        classifier.test(test_loader)
+        accuracy = classifier.test(test_loader)
+        color = 'green' if accuracy > .5 else 'red'
+        click.secho('Accuracy={}'.format(accuracy), fg=color)
 
 
 if __name__ == '__main__':
