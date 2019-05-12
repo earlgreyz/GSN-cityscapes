@@ -20,17 +20,23 @@ class CityscapesDataset(Dataset):
         self.samples = glob.glob(os.path.join(root, '*.png'))
         self.classes = classes
         self.transform = transforms.ToTensor()
+        self.n = len(self.samples)
 
     def __getitem__(self, item):
+        item, flip = item % self.n, item >= self.n
+
         img = image_loader(self.samples[item])
         w, h = img.size
         n = w // 2
 
-        label = [[self.classes[img.getpixel((n + x, y))] for x in range(n)] for y in range(h)]
+        sample = np.array(img)[:, :n, :]
+        target = np.array([[self.classes[img.getpixel((n + x, y))] for x in range(n)] for y in range(h)])
 
-        sample = self.transform(np.array(img)[:, :n, :])
-        target = torch.tensor(label, dtype=torch.long)
-        return sample, target
+        if flip:
+            sample = np.flip(sample, axis=1)
+            target = np.flip(target, axis=1)
+
+        return self.transform(sample.copy()), torch.tensor(target.copy(), dtype=torch.long)
 
     def __len__(self):
-        return len(self.samples)
+        return self.n * 2
