@@ -22,7 +22,7 @@ desired_accuracy = .5
 @click.option('--no-train', is_flag=True, default=False)
 @click.option('--no-test', is_flag=True, default=False)
 @click.option('--epochs', '-e', default=5)
-@click.option('--batch-size', '-b', default=100)
+@click.option('--batch-size', '-b', default=10)
 @click.option('--learning-rate', '-l', default=0.01)
 @click.option('--logs-dir', default='../logs')
 @click.option('--output-dir', default='../output')
