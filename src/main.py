@@ -5,10 +5,9 @@ from torch import cuda
 from torch.utils.data import DataLoader
 
 import callbacks
+from dataset import CityscapesDataset, CombinedDataset, FlippedDataset, split_dataset
 from nn.classifier import Classifier
 from nn.unet import UNet
-from dataset.cityscapes import CityscapesDataset
-from dataset.split import split_dataset
 
 from classes import cityscape_classes
 
@@ -18,6 +17,7 @@ desired_accuracy = .5
 @click.command()
 @click.option('--load-model', '-m', default=None)
 @click.option('--dataset-dir', '-d', default='../dataset')
+@click.option('--no-flips', '-f', is_flag=True, default=False)
 @click.option('--sample-rate', '-r', default=0.1)
 @click.option('--no-train', is_flag=True, default=False)
 @click.option('--no-test', is_flag=True, default=False)
@@ -27,7 +27,7 @@ desired_accuracy = .5
 @click.option('--logs-dir', default='../logs')
 @click.option('--output-dir', default='../output')
 def main(load_model: str,
-         dataset_dir: str, sample_rate: float,
+         dataset_dir: str, no_flips: bool, sample_rate: float,
          no_train: bool, no_test: bool,
          epochs: int, batch_size: int, learning_rate: float,
          logs_dir: str, output_dir: str):
@@ -46,6 +46,11 @@ def main(load_model: str,
 
     dataset = CityscapesDataset(root=dataset_dir, classes=cityscape_classes)
     train_dataset, test_dataset = split_dataset(dataset, sample_rate)
+
+    # Augument train set by horizontal flips
+    if not no_flips:
+        train_dataset = CombinedDataset(train_dataset, FlippedDataset(train_dataset))
+
     train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=True)
 

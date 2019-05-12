@@ -18,12 +18,11 @@ class RunningAverage:
 
 
 class Classifier:
-    def __init__(self, net, lr=0.1, threshold=0.5, train_callbacks=None):
+    def __init__(self, net, lr=0.1, train_callbacks=None):
         self.net = net
+        self.train_callbacks = train_callbacks
         self.optimizer = adam.Adam(net.parameters(), lr=lr)
         self.criterion = F.cross_entropy
-        self.threshold = threshold
-        self.train_callbacks = train_callbacks
 
     def train(self, train_loader, test_loader, num_epochs):
         for epoch in range(num_epochs):
@@ -70,7 +69,10 @@ class Classifier:
                     inputs, targets = inputs.to('cuda'), targets.to('cuda')
 
                 outputs = self.net(inputs)
-                _, predicted = torch.max(outputs.data, 1)
+                flipped = self.net(torch.flip(inputs, dims=(3,)))
+                averaged = (outputs + torch.flip(flipped, dims=(3,))) / 2
+                _, predicted = torch.max(averaged.data, 1)
+
                 n, h, w = targets.shape
                 correct = (predicted == targets).sum(dim=(1, 2)).float() / (h * w)
                 accuracy.update(correct.sum().item(), n)
