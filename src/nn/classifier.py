@@ -11,9 +11,9 @@ class RunningAverage:
         self.count = 0
         self.average = 0.0
 
-    def update(self, x):
+    def update(self, x, n=1):
         self.sum += x
-        self.count += 1
+        self.count += n
         self.average = self.sum / self.count
 
 
@@ -31,9 +31,7 @@ class Classifier:
             self._train_epoch(epoch=epoch, loader=train_loader)
             click.echo('Testing epoch {}'.format(epoch))
             self.net.eval()
-            accuracy = self.test(test_loader)
-            color = 'green' if accuracy > .5 else 'red'
-            click.secho('Accuracy={}'.format(accuracy), fg=color)
+            self.test(test_loader)
 
 
     def _train_epoch(self, epoch, loader):
@@ -58,17 +56,18 @@ class Classifier:
                 running_loss.update(loss.item())
 
     def test(self, loader):
-        correct = 0
-        total = 0
+        accuracy = RunningAverage()
+        show_stats = lambda _: '[{:2f}]'.format(accuracy.average)
 
-        with click.progressbar(loader) as bar:
+        with click.progressbar(loader, item_show_func=show_stats) as bar:
             for inputs, targets in bar:
                 if cuda.is_available():
                     inputs, targets = inputs.to('cuda'), targets.to('cuda')
 
                 outputs = self.net(inputs)
                 _, predicted = torch.max(outputs.data, 1)
-                total += targets.numel()
-                correct += (predicted == targets).sum().item()
+                n, h, w = targets.shape
+                correct = (predicted == targets).sum(dim=(1, 2)).float() / (h * w)
+                accuracy.update(correct.sum().item(), n)
 
-        return correct / total
+        return accuracy.average

@@ -11,7 +11,7 @@ from dataset.split import split_dataset
 
 from classes import cityscape_classes
 
-desired_precision = .5
+desired_accuracy = .5
 
 
 @click.command()
@@ -64,7 +64,7 @@ def main(load_model: str, save_model: str,
         click.secho('Testing model', fg='blue')
         net.eval()
         accuracy = classifier.test(test_loader)
-        color = 'green' if accuracy > .5 else 'red'
+        color = 'green' if accuracy > desired_accuracy else 'red'
         click.secho('Accuracy={}'.format(accuracy), fg=color)
 
 
