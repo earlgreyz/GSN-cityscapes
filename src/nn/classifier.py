@@ -18,9 +18,9 @@ class RunningAverage:
 
 
 class Classifier:
-    def __init__(self, net, lr=0.1, train_callbacks=None):
+    def __init__(self, net, lr=0.1, callbacks=None):
         self.net = net
-        self.train_callbacks = train_callbacks
+        self.callbacks = callbacks
         self.optimizer = adam.Adam(net.parameters(), lr=lr)
         self.criterion = F.cross_entropy
 
@@ -31,10 +31,10 @@ class Classifier:
             loss = self._train_epoch(epoch=epoch, loader=train_loader)
             click.echo('Testing epoch {}'.format(epoch))
             self.net.eval()
-            accuracy = self.test(test_loader)
+            accuracy, last_batch = self._test(test_loader)
 
-            for callback in self.train_callbacks:
-                callback(self.net, loss=loss, accuracy=accuracy)
+            for callback in self.callbacks:
+                callback(net=self.net, epoch=epoch, loss=loss, accuracy=accuracy, last_batch=last_batch)
 
     def _train_epoch(self, epoch, loader):
         running_loss = RunningAverage()
@@ -57,11 +57,17 @@ class Classifier:
                 # print statistics
                 running_loss.update(loss.item())
 
-        return running_loss
+        return running_loss.average
 
     def test(self, loader):
+        accuracy, _ = self._test(loader)
+        return accuracy
+
+    def _test(self, loader):
         accuracy = RunningAverage()
         show_stats = lambda _: '[{:2f}]'.format(accuracy.average)
+
+        last_batch = None
 
         with click.progressbar(loader, item_show_func=show_stats) as bar:
             for inputs, targets in bar:
@@ -77,4 +83,6 @@ class Classifier:
                 correct = (predicted == targets).sum(dim=(1, 2)).float() / (h * w)
                 accuracy.update(correct.sum().item(), n)
 
-        return accuracy.average
+                last_batch = (inputs, targets, predicted)
+
+        return accuracy.average, last_batch

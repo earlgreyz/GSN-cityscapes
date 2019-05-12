@@ -1,3 +1,5 @@
+import os
+
 import click
 
 import torch
@@ -5,6 +7,7 @@ from torch import cuda
 from torch.utils.data import DataLoader
 
 import callbacks
+from callbacks import tensorboard
 from dataset import CityscapesDataset, CombinedDataset, FlippedDataset, split_dataset
 from nn.classifier import Classifier
 from nn.unet import UNet
@@ -55,7 +58,9 @@ def main(load_model: str,
     test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=True)
 
     save_callback = callbacks.SaverCallback(output_path=output_dir)
-    classifier = Classifier(net, lr=learning_rate, train_callbacks=(save_callback,))
+    logger_callback = tensorboard.LoggerCallback(logs_path=os.path.join(logs_dir, 'tb_log'))
+    visualizer_callback = tensorboard.VisualizerCallback(logs_path=os.path.join(logs_dir, 'tb_vis'))
+    classifier = Classifier(net, lr=learning_rate, callbacks=(save_callback, logger_callback, visualizer_callback))
 
     if not no_train:
         click.secho('Training model', fg='blue')
