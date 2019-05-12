@@ -18,21 +18,24 @@ class RunningAverage:
 
 
 class Classifier:
-    def __init__(self, net, lr=0.1, threshold=0.5):
+    def __init__(self, net, lr=0.1, threshold=0.5, train_callbacks=None):
         self.net = net
         self.optimizer = adam.Adam(net.parameters(), lr=lr)
         self.criterion = F.cross_entropy
         self.threshold = threshold
+        self.train_callbacks = train_callbacks
 
     def train(self, train_loader, test_loader, num_epochs):
         for epoch in range(num_epochs):
             click.echo('Training epoch {}'.format(epoch))
             self.net.train()
-            self._train_epoch(epoch=epoch, loader=train_loader)
+            loss = self._train_epoch(epoch=epoch, loader=train_loader)
             click.echo('Testing epoch {}'.format(epoch))
             self.net.eval()
-            self.test(test_loader)
+            accuracy = self.test(test_loader)
 
+            for callback in self.train_callbacks:
+                callback(self.net, loss=loss, accuracy=accuracy)
 
     def _train_epoch(self, epoch, loader):
         running_loss = RunningAverage()
@@ -54,6 +57,8 @@ class Classifier:
 
                 # print statistics
                 running_loss.update(loss.item())
+
+        return running_loss
 
     def test(self, loader):
         accuracy = RunningAverage()

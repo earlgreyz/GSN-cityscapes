@@ -4,6 +4,7 @@ import torch
 from torch import cuda
 from torch.utils.data import DataLoader
 
+import callbacks
 from nn.classifier import Classifier
 from nn.unet import UNet
 from dataset.cityscapes import CityscapesDataset
@@ -16,7 +17,6 @@ desired_accuracy = .5
 
 @click.command()
 @click.option('--load-model', '-m', default=None)
-@click.option('--save-model', '-s', default=None)
 @click.option('--dataset-dir', '-d', default='../dataset')
 @click.option('--sample-rate', '-r', default=0.1)
 @click.option('--no-train', is_flag=True, default=False)
@@ -26,7 +26,7 @@ desired_accuracy = .5
 @click.option('--learning-rate', '-l', default=0.01)
 @click.option('--logs-dir', default='../logs')
 @click.option('--output-dir', default='../output')
-def main(load_model: str, save_model: str,
+def main(load_model: str,
          dataset_dir: str, sample_rate: float,
          no_train: bool, no_test: bool,
          epochs: int, batch_size: int, learning_rate: float,
@@ -49,16 +49,13 @@ def main(load_model: str, save_model: str,
     train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=True)
 
-    classifier = Classifier(net, lr=learning_rate)
+    save_callback = callbacks.SaverCallback(output_path=output_dir)
+    classifier = Classifier(net, lr=learning_rate, train_callbacks=(save_callback,))
 
     if not no_train:
         click.secho('Training model', fg='blue')
         net.train()
         classifier.train(train_loader, test_loader, epochs)
-
-    if save_model is not None and not no_train:
-        click.secho('Saving model as \'{}\''.format(save_model), fg='yellow')
-        torch.save(net.state_dict(), save_model)
 
     if not no_test:
         click.secho('Testing model', fg='blue')
