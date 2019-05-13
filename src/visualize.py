@@ -22,7 +22,7 @@ def apply_colors(image, colormap):
 
 @click.command()
 @click.option('--dataset-dir', '-d', default='../dataset')
-@click.option('--load-model', '-m', default='../model.dict')
+@click.option('--load-model', '-m', default='../output/20190513-171812')
 @click.argument('items', nargs=-1, type=int)
 def visualize(dataset_dir: str, load_model: str, items: [int]):
     device = torch.device('cuda:0' if cuda.is_available() else 'cpu')
