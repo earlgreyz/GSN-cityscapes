@@ -26,9 +26,9 @@ class VisualizerCallback(Callback):
     def __call__(self, epoch, last_batch, *args, **kwargs):
         inputs, targets, predicted = last_batch
 
-        image = (inputs[0].data.squeeze().float().numpy() * 255).astype(np.uint8)
-        target = targets[0].data.squeeze().numpy().astype(np.uint8)
-        predicted = predicted[0].data.squeeze().numpy().astype(np.uint8)
+        image = (inputs[0].data.squeeze().cpu().float().numpy() * 255).astype(np.uint8)
+        target = targets[0].data.squeeze().cpu().numpy().astype(np.uint8)
+        predicted = predicted[0].data.squeeze().cpu().numpy().astype(np.uint8)
 
         C, H, W = image.shape
 
