@@ -29,11 +29,12 @@ desired_accuracy = .5
 @click.option('--learning-rate', '-l', default=0.01)
 @click.option('--logs-dir', default='../logs')
 @click.option('--output-dir', default='../output')
+@click.option('--num-workers', default=1)
 def main(load_model: str,
          dataset_dir: str, no_flips: bool, sample_rate: float,
          no_train: bool, no_test: bool,
          epochs: int, batch_size: int, learning_rate: float,
-         logs_dir: str, output_dir: str):
+         logs_dir: str, output_dir: str, num_workers: int):
     device = torch.device('cuda:0' if cuda.is_available() else 'cpu')
     click.secho('Using device={}'.format(device), fg='blue')
 
@@ -54,8 +55,8 @@ def main(load_model: str,
     if not no_flips:
         train_dataset = CombinedDataset(train_dataset, FlippedDataset(train_dataset))
 
-    train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
-    test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=True)
+    train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+    test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
 
     save_callback = callbacks.SaverCallback(output_path=output_dir)
     logger_callback = tensorboard.LoggerCallback(logs_path=os.path.join(logs_dir, 'tb_log'))

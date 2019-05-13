@@ -4,7 +4,7 @@ from torch.utils.data import Dataset
 from dataset.sampled import SampledDataset
 
 
-def split_dataset(dataset: Dataset, sample_rate: float, seed: None) -> (SampledDataset, SampledDataset):
+def split_dataset(dataset: Dataset, sample_rate: float, seed: int = None) -> (SampledDataset, SampledDataset):
     size = len(dataset)
     items = list(range(size))
     if seed is not None:
