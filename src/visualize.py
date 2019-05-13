@@ -1,8 +1,7 @@
 import click
+import numpy as np
 import torch
 from torch import cuda
-
-from torch.utils.data import DataLoader
 
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
@@ -12,11 +11,20 @@ from dataset import FlippedDataset, CityscapesDataset
 from nn.unet import UNet
 
 
+def apply_colors(image, colormap):
+    W, H = image.shape
+    applied = np.zeros((W, H, 3))
+    for x in range(W):
+        for y in range(H):
+            applied[x, y, :] = np.array(colormap[image[x, y]])
+    return applied
+
+
 @click.command()
 @click.option('--dataset-dir', '-d', default='../dataset')
 @click.option('--load-model', '-m', default='../model.dict')
-@click.option('--items', '-i', default=1)
-def visualize(dataset_dir: str, load_model: str, items: int):
+@click.argument('items', nargs=-1, type=int)
+def visualize(dataset_dir: str, load_model: str, items: [int]):
     device = torch.device('cuda:0' if cuda.is_available() else 'cpu')
     click.secho('Using device={}'.format(device), fg='blue')
     net = UNet(in_channels=3, classes_count=len(cityscape_classes))
@@ -25,79 +33,60 @@ def visualize(dataset_dir: str, load_model: str, items: int):
 
     dataset = CityscapesDataset(root=dataset_dir, classes=cityscape_classes)
     flipped_dataset = FlippedDataset(dataset)
-    colormap = ListedColormap(cityscape_colormap_float)
+    correct_colormap = ListedColormap([(1., 0, 0), (0, 1., 0)])
 
-    loader = DataLoader(dataset=dataset, batch_size=1, shuffle=False)
-
-    for item in range(items):
+    for item in items:
         sample, target = dataset[item]
         sample_f, target_f = flipped_dataset[item]
 
-        fig = plt.figure(figsize=(20, 20))
+        fig = plt.figure(figsize=(15, 10))
 
         fig.add_subplot(2, 3, 1)
+        plt.title('Sample\n')
         plt.imshow(sample.transpose(0, 1).transpose(1, 2))
+        plt.imshow(apply_colors(target, cityscape_colormap_float), alpha=.5)
         plt.axis('off')
 
         fig.add_subplot(2, 3, 2)
-        plt.imshow(target, cmap=colormap)
-        plt.axis('off')
-
-        fig.add_subplot(2, 3, 3)
+        plt.title('Prediction\n')
+        plt.imshow(sample.transpose(0, 1).transpose(1, 2))
         outputs = net(sample.unsqueeze(0))
         _, predicted = torch.max(outputs.data, 1)
-        plt.imshow(predicted.squeeze(), cmap=colormap)
-
-        fig.add_subplot(2, 3, 4)
-        plt.imshow(sample_f.transpose(0, 1).transpose(1, 2))
-        plt.axis('off')
-
-        fig.add_subplot(2, 3, 5)
-        plt.imshow(target_f, cmap=colormap)
-        plt.axis('off')
-
-        fig.add_subplot(2, 3, 6)
-        outputs_f = net(sample_f.unsqueeze(0))
-        _, predicted_f = torch.max(outputs_f.data, 1)
-        plt.imshow(predicted_f.squeeze(), cmap=colormap)
-        plt.show()
-
-    for i, (inputs, targets) in enumerate(loader):
-        flipped = torch.flip(inputs, dims=(3,))
-        fig = plt.figure(figsize=(20, 20))
-
-        fig.add_subplot(2, 3, 1)
-        plt.imshow(inputs.squeeze().transpose(0, 1).transpose(1, 2))
-        plt.axis('off')
-
-        fig.add_subplot(2, 3, 2)
-        plt.imshow(targets.squeeze(), cmap=colormap)
+        predicted = predicted.squeeze()
+        plt.imshow(apply_colors(predicted, cityscape_colormap_float), alpha=.5)
         plt.axis('off')
 
         fig.add_subplot(2, 3, 3)
-        outputs = net(inputs)
-        _, predicted = torch.max(outputs.data, 1)
-        plt.imshow(predicted.squeeze(), cmap=colormap)
+        plt.title('Prediction correctness\n')
+        correct = (predicted == target)
+        plt.imshow(sample.transpose(0, 1).transpose(1, 2))
+        plt.imshow(correct, alpha=.25, cmap=correct_colormap)
+        plt.axis('off')
 
         fig.add_subplot(2, 3, 4)
-        plt.imshow(flipped.squeeze().transpose(0, 1).transpose(1, 2))
+        plt.title('Flipped sample\n')
+        plt.imshow(sample_f.transpose(0, 1).transpose(1, 2))
+        plt.imshow(apply_colors(target_f, cityscape_colormap_float), alpha=.5)
         plt.axis('off')
 
         fig.add_subplot(2, 3, 5)
-        outputs_flipped = net(flipped)
-        _, predicted = torch.max(outputs_flipped, 1)
-        plt.imshow(predicted.squeeze(), cmap=colormap)
+        plt.title('Prediction on flipped sample\n')
+        plt.imshow(sample_f.transpose(0, 1).transpose(1, 2))
+        outputs_f = net(sample_f.unsqueeze(0))
+        _, predicted_f = torch.max(outputs_f.data, 1)
+        predicted_f = predicted_f.squeeze()
+        plt.imshow(apply_colors(predicted_f, cityscape_colormap_float), alpha=.5)
         plt.axis('off')
 
         fig.add_subplot(2, 3, 6)
-        outputs_flipped = net(flipped)
-        _, predicted = torch.max(torch.flip(outputs_flipped, dims=(3,)), 1)
-        plt.imshow(predicted.squeeze(), cmap=colormap)
+        plt.title('Prediction correctness\n')
+        plt.imshow(sample_f.transpose(0, 1).transpose(1, 2))
+        correct = (predicted_f == target_f)
+        plt.imshow(correct, alpha=.25, cmap=correct_colormap)
         plt.axis('off')
 
         plt.show()
-        if i == items - 1:
-            break
+
 
 if __name__ == '__main__':
     visualize()
